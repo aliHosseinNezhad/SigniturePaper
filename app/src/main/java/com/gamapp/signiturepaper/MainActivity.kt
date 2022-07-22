@@ -1,11 +1,24 @@
 package com.gamapp.signiturepaper
 
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.util.Base64
+import android.os.Environment
+import android.provider.DocumentsContract
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.ManagedActivityResultLauncher
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,111 +36,280 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.gamapp.signaturepaper.*
-import com.gamapp.signaturepaper.extensions.getAsBase64
 import com.gamapp.signiturepaper.ui.theme.SigniturePaperTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.lang.Exception
+
+object FileManager {
+    private val files = mutableStateListOf<List<File>>(listOf())
+    val currentFiles = derivedStateOf {
+        files.last()
+    }
+
+    fun init() {
+        val file = Environment.getExternalStorageDirectory()
+        setFileListByFile(file)
+    }
+
+    fun back() {
+        if (files.size > 2)
+            files.removeLastOrNull()
+    }
+
+    fun setFileListByFile(file: File) {
+        files += file.listFiles()?.mapNotNull { it } ?: emptyList()
+    }
+
+    fun write() {
+        val file = Environment.getExternalStorageDirectory()
+        val new = File(file, "SignaturePaperFolder")
+        if (!new.exists()) {
+            new.mkdir()
+        }
+    }
+
+
+}
+
+object PermissionManager {
+    fun requestWritePermission(
+        context: Context,
+        launcher: ManagedActivityResultLauncher<Array<String>, Map<String, @JvmSuppressWildcards Boolean>>
+    ) {
+        if (!hasPermission(context)) {
+            launcher.launch(
+                arrayOf(
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+
+                    )
+            )
+        }
+    }
+
+    fun hasPermission(context: Context): Boolean {
+        var check = ContextCompat
+            .checkSelfPermission(
+                context,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        Log.i(TAG, "hasPermission: read permission $check")
+        check = check && (ContextCompat
+            .checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        Log.i(TAG, "hasPermission: write permission $check")
+        return check
+    }
+}
+
+object ImageSavingManager {
+    private fun saveImageIntent(title: String, uri: Uri? = null): Intent {
+        return Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            putExtra(Intent.EXTRA_TITLE, title)
+            Intent.EXTRA_ALLOW_MULTIPLE
+            Intent.EXTRA_TITLE
+
+            // Optionally, specify a URI for the directory that should be opened in
+            // the system file picker before your app creates the document.
+            if (uri != null && Build.VERSION.SDK_INT >= 26)
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI, uri)
+        }
+    }
+
+    private val activityResult = Channel<ActivityResult>(capacity = Channel.UNLIMITED)
+    private var launcher: ManagedActivityResultLauncher<Intent, ActivityResult>? = null
+
+    @Composable
+    fun RememberLauncher() {
+        launcher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult(),
+            onResult = {
+                activityResult.trySend(it)
+            })
+    }
+
+    suspend fun save(
+        context: Context,
+        title: String = "Signature.png",
+        bitmap: Bitmap,
+        message: (String) -> Unit
+    ) {
+        val contentResolver = context.contentResolver
+        val launcher = this.launcher
+        if (launcher != null) {
+            launcher.launch(saveImageIntent(title))
+            activityResult.receiveAsFlow().take(1).collectLatest {
+                if (it.resultCode == Activity.RESULT_OK) {
+                    try {
+                        it.data?.data?.let { uri ->
+                            contentResolver.openFileDescriptor(uri, "r")?.let {
+
+                            }
+                            var success:Boolean
+                            withContext(context = Dispatchers.IO) {
+                                success = bitmap.compress(
+                                    Bitmap.CompressFormat.PNG,
+                                    100,
+                                    contentResolver.openOutputStream(uri)
+                                )
+                            }
+                            if (success)
+                                message("image is successfully saved")
+                            else message("image is not saved!")
+                        } ?: kotlin.run {
+                            message("image is not saved!")
+                        }
+
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        message("image is not saved!")
+                    }
+                } else message("image is not saved!")
+            }
+        }
+    }
+}
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             SigniturePaperTheme {
-                val state = rememberSignaturePaperState()
-                var value by remember {
-                    mutableStateOf(0f)
-                }
-                var stroke by remember {
-                    mutableStateOf(10f)
-                }
-                val palette = palette()
-                var signatureColors by remember {
-                    mutableStateOf(
-                        SignaturePaperColors(
-                            backgroundColor = Color.Transparent,
-                            Color(0, 100, 255)
+                PermissionScreen {
+                    val scope = rememberCoroutineScope()
+                    val context = LocalContext.current
+                    val state = rememberSignaturePaperState()
+                    var value by remember {
+                        mutableStateOf(0f)
+                    }
+                    var stroke by remember {
+                        mutableStateOf(10f)
+                    }
+                    val palette = palette()
+                    var signatureColors by remember {
+                        mutableStateOf(
+                            SignaturePaperColors(
+                                backgroundColor = Color.Transparent,
+                                Color(0, 100, 255)
+                            )
                         )
-                    )
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.LightGray.copy(0.5f))
-                ) {
-                    Slider(value = value, onValueChange = {
-                        value = it
-                    })
-                    Row(
+                    }
+                    ImageSavingManager.RememberLauncher()
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                            .fillMaxSize()
+                            .background(Color.LightGray.copy(0.5f))
                     ) {
-
-                        Points {
-                            stroke = it
-                        }
-                        SignaturePaper(
+                        Slider(value = value, onValueChange = {
+                            value = it
+                        })
+                        Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .border(1.dp, Color.Black)
-                                .wrapContentSize(),
-                            state = state,
-                            maxStrokeWidth = stroke,
-                            colors = signatureColors,
-                        )
-                        TemplateColors(
-                            modifier = Modifier
-                                .width(40.dp + 50.dp * (value))
-                                .fillMaxHeight(),
-                            colors = palette,
-                            onSelect = {
-                                signatureColors = it
+                                .fillMaxWidth()
+                        ) {
+                            Points {
+                                stroke = it
                             }
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .wrapContentHeight()
-                            .align(Alignment.CenterHorizontally)
-                    ) {
-                        Button(
-                            onClick = state::clear,
-                            modifier = Modifier
-                                .wrapContentHeight()
-                        ) {
-                            Text(text = "Clear")
-                        }
-                        Spacer(modifier = Modifier.padding(8.dp))
-                        Button(
-                            onClick = {
-                                val base64 = state.getAsBase64()
-                                val bytes = Base64.decode(base64, Base64.DEFAULT)
-                                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                if (base64 != null) {
-                                    File(filesDir, "Image.png").apply {
-                                        bitmap.compress(
-                                            Bitmap.CompressFormat.PNG,
-                                            100,
-                                            outputStream()
-                                        )
-                                    }
+                            SignaturePaper(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .border(1.dp, Color.Black)
+                                    .wrapContentSize(),
+                                state = state,
+                                maxStrokeWidth = stroke,
+                                colors = signatureColors,
+                            )
+                            Palette(
+                                modifier = Modifier
+                                    .width(40.dp + 50.dp * (value))
+                                    .fillMaxHeight(),
+                                colors = palette,
+                                onSelect = {
+                                    signatureColors = it
                                 }
-                            },
+                            )
+                        }
+                        Row(
                             modifier = Modifier
                                 .wrapContentHeight()
+                                .align(Alignment.CenterHorizontally)
                         ) {
-                            Text(text = "GenerateBitmap")
+                            Button(
+                                onClick = state::clear,
+                                modifier = Modifier
+                                    .wrapContentHeight()
+                            ) {
+                                Text(text = "Clear")
+                            }
+                            Spacer(modifier = Modifier.padding(8.dp))
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        ImageSavingManager.save(
+                                            context,
+                                            bitmap = state.getAsBitmap() ?: return@launch
+                                        ) {
+                                            Toast.makeText(context, it, Toast.LENGTH_SHORT)
+                                                .show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .wrapContentHeight()
+                            ) {
+                                Text(text = "Save signature")
+                            }
+
                         }
 
                     }
+
                 }
             }
         }
+    }
+}
+
+@Composable
+fun PermissionScreen(screen: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val permission = remember {
+        mutableStateOf(PermissionManager.hasPermission(context))
+    }
+    if (permission.value) {
+        screen()
+    } else {
+        val launcher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions(),
+            onResult = {
+                permission.value = PermissionManager.hasPermission(context)
+            }
+        )
+        LaunchedEffect(key1 = Unit) {
+            PermissionManager.requestWritePermission(context, launcher)
+        }
+
+
     }
 }
 
@@ -174,7 +356,7 @@ fun palette(): List<SignaturePaperColors> {
 }
 
 @Composable
-fun TemplateColors(
+fun Palette(
     modifier: Modifier,
     colors: List<SignaturePaperColors>,
     onSelect: (SignaturePaperColors) -> Unit
@@ -245,7 +427,6 @@ fun Points(onSet: (Float) -> Unit) {
         }
     }
 }
-
 
 @Composable
 fun Point(modifier: Modifier, stroke: Float) {
