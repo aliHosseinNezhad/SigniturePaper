@@ -32,11 +32,12 @@ fun SignaturePaper(
     maxStrokeWidth: Dp = 1.dp
 ) {
     val density = LocalDensity.current
+    val strokeInPx = with(density){
+        maxStrokeWidth.toPx()
+    }
     Snapshot.withoutReadObservation {
         state.colors = colors
-        state.strokeWidth = with(density){
-            maxStrokeWidth.toPx()
-        }
+        state.strokeWidth = strokeInPx
     }
     LaunchedEffect(key1 = state) {
         val size = derivedStateOf { state.width to state.height }
@@ -100,7 +101,7 @@ fun SignaturePaper(
         Spacer(
             modifier = Modifier
                 .matchParentSize()
-                .motionEvents(state, stroke = maxStrokeWidth)
+                .motionEvents(state, stroke = strokeInPx)
                 .drawBehind {
                     val rect = size.toRect()
                     val r = rect.toAndroidRect()
