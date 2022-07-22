@@ -9,6 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -26,11 +29,14 @@ fun SignaturePaper(
     modifier: Modifier = Modifier,
     state: SignaturePaperState = rememberSignaturePaperState(),
     colors: SignaturePaperColors = SignatureDefaults.colors(),
-    maxStrokeWidth: Float = 10f
+    maxStrokeWidth: Dp = 1.dp
 ) {
+    val density = LocalDensity.current
     Snapshot.withoutReadObservation {
         state.colors = colors
-        state.strokeWidth = maxStrokeWidth
+        state.strokeWidth = with(density){
+            maxStrokeWidth.toPx()
+        }
     }
     LaunchedEffect(key1 = state) {
         val size = derivedStateOf { state.width to state.height }
