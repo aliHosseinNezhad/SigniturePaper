@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.gamapp.signaturepaper.*
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity() {
                         mutableStateOf(0f)
                     }
                     var stroke by remember {
-                        mutableStateOf(10f)
+                        mutableStateOf(1.dp)
                     }
                     val palette = palette()
                     var signatureColors by remember {
@@ -396,17 +397,17 @@ fun Palette(
 }
 
 @Composable
-fun Points(onSet: (Float) -> Unit) {
+fun Points(onSet: (Dp) -> Unit) {
     val points = remember {
         listOf(
-            2f,
-            5f,
-            10f,
-            12f,
-            20f,
-            25f,
-            30f,
-            40f,
+            0.5f.dp,
+            1.dp,
+            2.dp,
+            3.dp,
+            5.dp,
+            6.dp,
+            8.dp,
+            10.dp,
         )
     }
     Column(
@@ -429,10 +430,7 @@ fun Points(onSet: (Float) -> Unit) {
 }
 
 @Composable
-fun Point(modifier: Modifier, stroke: Float) {
-    val size = with(LocalDensity.current) {
-        (stroke * 2).toDp()
-    }
+fun Point(modifier: Modifier, stroke: Dp) {
     Column(
         modifier = modifier.border(1.dp, Color.Green),
         verticalArrangement = Arrangement.spacedBy(4.dp, alignment = Alignment.CenterVertically)
@@ -441,12 +439,12 @@ fun Point(modifier: Modifier, stroke: Float) {
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .border(1.dp, Color.Blue)
-                .size(size)
+                .size(stroke * 2)
         ) {
-            drawCircle(Color.Black, radius = stroke)
+            drawCircle(Color.Black, radius = stroke.toPx())
         }
         Text(
-            text = "$stroke",
+            text = "${stroke.value} dp",
             modifier = Modifier.align(Alignment.CenterHorizontally),
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Normal

@@ -53,7 +53,7 @@ class PointerEventChannel {
  * @param stroke : strokeWidth of signature path.
  * @return offset after motion event if movement is qualified or exist for specified pointer, else returns null
  * */
-private fun SignaturePaperState.returnMoveOffsetIfExist(
+private fun SignaturePaperState.moveOffsetIfExist(
     id: Int,
     event: MotionEvent,
     stroke: Float
@@ -63,8 +63,8 @@ private fun SignaturePaperState.returnMoveOffsetIfExist(
     val new = event.offset(index)
 
     val offset = points[id] ?: return new
-
-    return if ((offset v new).size > stroke * 1.1f) {
+    val s = stroke.coerceIn(1f, 5f)
+    return if ((offset v new).size > s) {
         points[id] = new
         new
     } else null
@@ -92,7 +92,7 @@ fun Modifier.motionEvents(state: SignaturePaperState, stroke: Float): Modifier {
             }
             MotionEvent.ACTION_MOVE -> {
                 (0..9).forEach { id ->
-                    val offset = state.returnMoveOffsetIfExist(id, event, stroke)
+                    val offset = state.moveOffsetIfExist(id, event, stroke)
                     if (offset != null) {
                         state.send(
                             PointerEvent.Move(
