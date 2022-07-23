@@ -398,6 +398,9 @@ fun Palette(
 
 @Composable
 fun Points(onSet: (Dp) -> Unit) {
+    var selected by remember {
+        mutableStateOf<Dp?>(null)
+    }
     val points = remember {
         listOf(
             0.5f.dp,
@@ -408,22 +411,34 @@ fun Points(onSet: (Dp) -> Unit) {
             6.dp,
             8.dp,
             10.dp,
+            20.dp
         )
     }
     Column(
         modifier = Modifier
-            .width(40.dp)
+            .width(50.dp)
             .fillMaxHeight(),
-        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
     ) {
         for (point in points) {
+            val color by remember(point) {
+                derivedStateOf {
+                    if(selected == point) Color.Blue.copy(0.3f)
+                    else Color.Transparent
+                }
+            }
             Point(
                 modifier = Modifier
-                    .width(40.dp)
-                    .heightIn(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(color)
                     .clickable {
+                        selected = point
                         onSet(point)
-                    }, stroke = point
+                    }
+                    .padding(vertical = 4.dp)
+                    .width(50.dp)
+                    .heightIn(50.dp)
+                    , stroke = point
             )
         }
     }
@@ -432,13 +447,12 @@ fun Points(onSet: (Dp) -> Unit) {
 @Composable
 fun Point(modifier: Modifier, stroke: Dp) {
     Column(
-        modifier = modifier.border(1.dp, Color.Green),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp, alignment = Alignment.CenterVertically)
     ) {
         Canvas(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .border(1.dp, Color.Blue)
                 .size(stroke * 2)
         ) {
             drawCircle(Color.Black, radius = stroke.toPx())
