@@ -5,6 +5,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import com.gamapp.signaturepaper.abstracts.PointerEventsState
 import com.gamapp.signaturepaper.extensions.v
 import com.gamapp.signaturepaper.models.PointerEvent
 
@@ -14,37 +15,35 @@ fun MotionEvent.offset(index: Int): Offset {
     return Offset(getX(index), getY(index))
 }
 
-private fun SignaturePaperState.send(event: PointerEvent) {
-    this.pointerChannel.send(event)
-}
 
-/**
- * A channel to notify listeners of pointer events
- * */
-class PointerEventChannel {
-    private val listeners = mutableListOf<(event: PointerEvent) -> Unit>();
-    fun clear() {
-        listeners.clear()
-    }
 
-    /**
-     * to send the pointer event
-     * */
-    fun send(event: PointerEvent) {
-        synchronized(listeners) {
-            listeners.forEach {
-                it.invoke(event)
-            }
-        }
-    }
-
-    /**
-     * to receive pointer events
-     * */
-    fun receive(scope: (event: PointerEvent) -> Unit) {
-        listeners += scope
-    }
-}
+///**
+// * A channel to notify listeners of pointer events
+// * */
+//class PointerEventChannel {
+//    private val listeners = mutableListOf<(event: PointerEvent) -> Unit>();
+//    fun clear() {
+//        listeners.clear()
+//    }
+//
+//    /**
+//     * to send the pointer event
+//     * */
+//    fun send(event: PointerEvent) {
+//        synchronized(listeners) {
+//            listeners.forEach {
+//                it.invoke(event)
+//            }
+//        }
+//    }
+//
+//    /**
+//     * to receive pointer events
+//     * */
+//    fun receive(scope: (event: PointerEvent) -> Unit) {
+//        listeners += scope
+//    }
+//}
 
 /**
  * a function to check whether movement has occurred or reached a specified size by particular point.
@@ -53,7 +52,7 @@ class PointerEventChannel {
  * @param stroke : strokeWidth of signature path.
  * @return offset after motion event if movement is qualified or exist for specified pointer, else returns null
  * */
-private fun SignaturePaperState.moveOffsetIfExist(
+private fun PointerEventsState.moveOffsetIfExist(
     id: Int,
     event: MotionEvent,
     stroke: Float
@@ -74,7 +73,7 @@ private fun SignaturePaperState.moveOffsetIfExist(
  * To handle MotionEvents
  * */
 @OptIn(ExperimentalComposeUiApi::class)
-fun Modifier.motionEvents(state: SignaturePaperState, stroke: Float): Modifier {
+fun Modifier.pointerEvents(state: PointerEventsState, stroke: Float): Modifier {
     return pointerInteropFilter { event ->
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -82,7 +81,7 @@ fun Modifier.motionEvents(state: SignaturePaperState, stroke: Float): Modifier {
                 val id = event.getPointerId(index)
                 val offset = event.offset(index)
                 state.points[id] = offset
-                state.send(
+                state.onEvent(
                     PointerEvent.Down(
                         id = id,
                         offset = event.offset(index)
@@ -94,7 +93,7 @@ fun Modifier.motionEvents(state: SignaturePaperState, stroke: Float): Modifier {
                 (0..9).forEach { id ->
                     val offset = state.moveOffsetIfExist(id, event, stroke)
                     if (offset != null) {
-                        state.send(
+                        state.onEvent(
                             PointerEvent.Move(
                                 id = id,
                                 offset = offset
@@ -107,7 +106,7 @@ fun Modifier.motionEvents(state: SignaturePaperState, stroke: Float): Modifier {
             MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
                 val id = event.getPointerId(event.actionIndex)
                 state.points[id] = null
-                state.send(
+                state.onEvent(
                     PointerEvent.Up(
                         id = id
                     )
@@ -116,7 +115,7 @@ fun Modifier.motionEvents(state: SignaturePaperState, stroke: Float): Modifier {
             }
             MotionEvent.ACTION_CANCEL -> {
                 state.points.clear()
-                state.send(PointerEvent.Cancel)
+                state.onEvent(PointerEvent.Cancel)
                 true
             }
             else -> false

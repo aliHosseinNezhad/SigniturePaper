@@ -3,13 +3,14 @@ package com.gamapp.signaturepaper.models
 import androidx.compose.ui.geometry.Offset
 import com.gamapp.signaturepaper.extensions.v
 import kotlin.math.exp
+import kotlin.math.sqrt
 
 /**
- * to calculate Stroke Weight of a point by
+ * A function To calculate Stroke Weight of a point by
  * */
 private fun calculateStrokeWeight(input: Float): Float {
-    val v = input / 100f
-    return (exp(v * v * -1f)) * 0.8f + 0.2f
+    val v = input / 100
+    return (exp(v * v * -1f)) * 0.9f + 0.1f
 }
 
 /**
@@ -17,19 +18,24 @@ private fun calculateStrokeWeight(input: Float): Float {
  * @param offset the point offset
  * @param previous reference to previous point in the path. "previous" is null if point is first point of the path
  * */
-data class Point(val offset: Offset, val previous: Point?) {
-    val strokeWeight by lazy {
-        calculateStrokeWeight(distance)
+class Point(
+    val offset: Offset,
+    override var previous: Point?,
+    override var next: Point?
+) : LinkedObject<Point> {
+    val strokeWeight get() = run {
+         calculateStrokeWeight(distance)
     }
 
-    private val distance by lazy {
-        val offset = previous?.offset
-        if (offset == null) {
-            0f
-        } else {
-            (offset v this.offset).size
+    private val distance
+        get() = run {
+            val offset = previous?.offset
+            if (offset == null) {
+                0f
+            } else {
+                (offset v this.offset).size
+            }
         }
-    }
 }
 
 

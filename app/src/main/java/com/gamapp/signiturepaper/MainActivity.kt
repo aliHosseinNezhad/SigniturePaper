@@ -9,82 +9,35 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.provider.DocumentsContract
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
-import androidx.compose.material.Slider
-import androidx.compose.material.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.gamapp.signaturepaper.*
-import com.gamapp.signiturepaper.ui.theme.SigniturePaperTheme
+import com.gamapp.signaturepaper.abstracts.PointerEventsState
+import com.gamapp.signaturepaper.models.*
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.lang.Exception
 
-object FileManager {
-    private val files = mutableStateListOf<List<File>>(listOf())
-    val currentFiles = derivedStateOf {
-        files.last()
-    }
-
-    fun init() {
-        val file = Environment.getExternalStorageDirectory()
-        setFileListByFile(file)
-    }
-
-    fun back() {
-        if (files.size > 2)
-            files.removeLastOrNull()
-    }
-
-    fun setFileListByFile(file: File) {
-        files += file.listFiles()?.mapNotNull { it } ?: emptyList()
-    }
-
-    fun write() {
-        val file = Environment.getExternalStorageDirectory()
-        val new = File(file, "SignaturePaperFolder")
-        if (!new.exists()) {
-            new.mkdir()
-        }
-    }
-
-
-}
 
 object PermissionManager {
     fun requestWritePermission(
@@ -164,7 +117,7 @@ object ImageSavingManager {
                             contentResolver.openFileDescriptor(uri, "r")?.let {
 
                             }
-                            var success:Boolean
+                            var success: Boolean
                             withContext(context = Dispatchers.IO) {
                                 success = bitmap.compress(
                                     Bitmap.CompressFormat.PNG,
@@ -191,277 +144,14 @@ object ImageSavingManager {
 
 
 class MainActivity : ComponentActivity() {
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
-            SigniturePaperTheme {
-                PermissionScreen {
-                    val scope = rememberCoroutineScope()
-                    val context = LocalContext.current
-                    val state = rememberSignaturePaperState()
-                    var value by remember {
-                        mutableStateOf(0f)
-                    }
-                    var stroke by remember {
-                        mutableStateOf(1.dp)
-                    }
-                    val palette = palette()
-                    var signatureColors by remember {
-                        mutableStateOf(
-                            SignaturePaperColors(
-                                backgroundColor = Color.Transparent,
-                                Color(0, 100, 255)
-                            )
-                        )
-                    }
-                    ImageSavingManager.RememberLauncher()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.LightGray.copy(0.5f))
-                    ) {
-                        Slider(value = value, onValueChange = {
-                            value = it
-                        })
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                        ) {
-                            Points {
-                                stroke = it
-                            }
-                            SignaturePaper(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .border(1.dp, Color.Black)
-                                    .wrapContentSize(),
-                                state = state,
-                                maxStrokeWidth = stroke,
-                                colors = signatureColors,
-                            )
-                            Palette(
-                                modifier = Modifier
-                                    .width(40.dp + 50.dp * (value))
-                                    .fillMaxHeight(),
-                                colors = palette,
-                                onSelect = {
-                                    signatureColors = it
-                                }
-                            )
-                        }
-                        Row(
-                            modifier = Modifier
-                                .wrapContentHeight()
-                                .align(Alignment.CenterHorizontally)
-                        ) {
-                            Button(
-                                onClick = state::clear,
-                                modifier = Modifier
-                                    .wrapContentHeight()
-                            ) {
-                                Text(text = "Clear")
-                            }
-                            Spacer(modifier = Modifier.padding(8.dp))
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        ImageSavingManager.save(
-                                            context,
-                                            bitmap = state.getAsBitmap() ?: return@launch
-                                        ) {
-                                            Toast.makeText(context, it, Toast.LENGTH_SHORT)
-                                                .show()
-                                        }
-                                    }
-                                },
-                                modifier = Modifier
-                                    .wrapContentHeight()
-                            ) {
-                                Text(text = "Save signature")
-                            }
 
-                        }
-
-                    }
-
-                }
-            }
+            ComplexSample()
         }
-    }
-}
-
-@Composable
-fun PermissionScreen(screen: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val permission = remember {
-        mutableStateOf(PermissionManager.hasPermission(context))
-    }
-    if (permission.value) {
-        screen()
-    } else {
-        val launcher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions(),
-            onResult = {
-                permission.value = PermissionManager.hasPermission(context)
-            }
-        )
-        LaunchedEffect(key1 = Unit) {
-            PermissionManager.requestWritePermission(context, launcher)
-        }
-
-
-    }
-}
-
-
-@Composable
-fun palette(): List<SignaturePaperColors> {
-    val colors = remember {
-        listOf(
-            SignaturePaperColors(
-                backgroundColor = Color.Transparent,
-                signatureColor = Color.Blue
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.White,
-                signatureColor = Color.Blue
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.White,
-                signatureColor = Color.Red
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.White,
-                signatureColor = Color.Black
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.Blue,
-                signatureColor = Color.White
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.Black,
-                signatureColor = Color.Yellow
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.Blue,
-                signatureColor = Color.Yellow
-            ),
-            SignaturePaperColors(
-                backgroundColor = Color.Black,
-                signatureColor = Color.White
-            ),
-        )
-    }
-    return colors
-}
-
-@Composable
-fun Palette(
-    modifier: Modifier,
-    colors: List<SignaturePaperColors>,
-    onSelect: (SignaturePaperColors) -> Unit
-) {
-    LazyColumn(
-        modifier = modifier.clip(shape = RectangleShape),
-        verticalArrangement = Arrangement.spacedBy(
-            8.dp,
-            alignment = Alignment.CenterVertically
-        )
-    ) {
-        items(colors) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .border(1.dp, Color.Blue, shape = RoundedCornerShape(15.dp))
-                    .clip(RoundedCornerShape(15.dp))
-                    .clickable {
-                        onSelect(it)
-                    }) {
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .background(it.backgroundColor)
-                )
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .background(it.signatureColor)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun Points(onSet: (Dp) -> Unit) {
-    var selected by remember {
-        mutableStateOf<Dp?>(null)
-    }
-    val points = remember {
-        listOf(
-            0.5f.dp,
-            1.dp,
-            2.dp,
-            3.dp,
-            5.dp,
-            6.dp,
-            8.dp,
-            10.dp,
-            20.dp
-        )
-    }
-    Column(
-        modifier = Modifier
-            .width(50.dp)
-            .fillMaxHeight(),
-        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
-    ) {
-        for (point in points) {
-            val color by remember(point) {
-                derivedStateOf {
-                    if(selected == point) Color.Blue.copy(0.3f)
-                    else Color.Transparent
-                }
-            }
-            Point(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color)
-                    .clickable {
-                        selected = point
-                        onSet(point)
-                    }
-                    .padding(vertical = 4.dp)
-                    .width(50.dp)
-                    .heightIn(50.dp)
-                    , stroke = point
-            )
-        }
-    }
-}
-
-@Composable
-fun Point(modifier: Modifier, stroke: Dp) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp, alignment = Alignment.CenterVertically)
-    ) {
-        Canvas(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .size(stroke * 2)
-        ) {
-            drawCircle(Color.Black, radius = stroke.toPx())
-        }
-        Text(
-            text = "${stroke.value} dp",
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Normal
-        )
     }
 }
